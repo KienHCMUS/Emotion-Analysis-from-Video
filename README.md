@@ -1,29 +1,26 @@
 # Emotion Analysis from Video
 
-Detect each face's emotion from a video/webcam, save the emotional and temporal information to analyze. Seven emotion is: Angry, Disgust, Fear, Happy, Neutral, Sad, Surprise.
+Detect each face's emotion from a video/webcam, save the emotional and temporal information for analysis. Seven detected emotions: Angry, Disgust, Fear, Happy, Neutral, Sad, and Surprise.
 
 ---
 
-### 1. Install:
+### 1. Install and configure:
 - Visual Studio: https://visualstudio.microsoft.com/
 - OpenCV: https://opencv.org/releases/
+- Config: https://learnopencv.com/code-opencv-in-visual-studio/
 
 ---
 
-### 2. Config OpenCV in Visual Studio:
-https://learnopencv.com/code-opencv-in-visual-studio/
-
----
-
-### 3. Add code to the project:
+### 2. Add code to the project:
 - Clone the repository
-- Copy code in "main.cpp" to project, which is created in step 2
-- Copy onnx model files to project.
+- Copy code in "main.cpp" to project, which is created in "Config" step.
+- Copy onnx model files to project
 
 ---
 
-### 4. Build and run project:
+### 3. Build and run project:
 The result will be:
 - Shown on video/webcam
-- Saved in "face_logs" folder in project.
+- Saved in "face_logs" folder in project
+
 ![Emotion](test.jpg)
