@@ -8,12 +8,6 @@
 #include <opencv2/dnn.hpp>
 #include <opencv2/video/tracking.hpp>
 #include <vector>
-#ifdef _WIN32
-    #include <windows.h>
-#else
-    #include <unistd.h>
-    #include <limits.h>
-#endif
 
 using namespace cv;
 using namespace cv::dnn;
@@ -33,20 +27,14 @@ double calculateIoU(const Rect2d& rect1, const Rect2d& rect2) {
     return 0.0;
 }
 
-fs::path getExecutableDir() {
-#ifdef _WIN32
-    char buffer[MAX_PATH];
-    GetModuleFileNameA(NULL, buffer, MAX_PATH);
-    return fs::path(buffer).parent_path();
-#else
-    char buffer[PATH_MAX];
-    readlink("/proc/self/exe", buffer, PATH_MAX);
-    return fs::path(buffer).parent_path();
-#endif
-}
+int main(int argc, char** argv) {
+    const cv::String keys =
+    "{help h usage| | print this message}"
+    "{input i |0| path to input video file or webcam ID}";
+    cv::CommandLineParser parser(argc, argv, keys);
+    if (parser.has("help")) { parser.printMessage(); return 0; }
+    std::string input = parser.get<cv::String>("input");
 
-int main() {
-    fs::path exePath = getExecutableDir();
     /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
     // 0. Create result folder if it does not exist
     if (!fs::exists(LOG_ROOT)) {
@@ -67,9 +55,9 @@ int main() {
     // 1. YuNet configuration: for detect face
     const int inputW = 640;
     const int inputH = 480;
-    fs::path yunetPath = exePath / "face_detection_yunet_2023mar_int8.onnx";
+    std::string yunetPath = std::string(PROJECT_ROOT) + "/models/face_detection_yunet_2023mar_int8.onnx";
     Ptr<cv::FaceDetectorYN> detector = cv::FaceDetectorYN::create(
-        yunetPath.string(), "",
+        yunetPath, "",
         Size(inputW, inputH), 0.78f, 0.3f, 50
         // 0.78f: confidence threshold: only take prediction that has confidence score > confidence threshold
         // 0.3f: IoU threshold for Non-Maximum Suppression
@@ -84,8 +72,8 @@ int main() {
     
     /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
     // 2. MobileNet configuration: for classify emotion
-    fs::path mobilenetPath = exePath / "MobileNet.onnx";
-    Net emotionNet = readNetFromONNX(mobilenetPath.string());// 0.47f1score, 0.6445_neutral(m)_happy_supprise, MobileNet_acc_0.65, m6278
+    std::string mobilenetPath = std::string(PROJECT_ROOT) + "/models/MobileNet.onnx";
+    Net emotionNet = readNetFromONNX(mobilenetPath);
     if (emotionNet.empty()) {
         std::cerr << "Can't load emotion classification model." << std::endl;
         return -1;
@@ -98,7 +86,11 @@ int main() {
 
     /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
     // 3. Open camera, configurate parameters for tracking
-    VideoCapture cap(0); // 0: webcam. Can pass a directory to a video, like "video.mp4"
+    VideoCapture cap; // 0: webcam. Can pass a directory to a video, like "video.mp4"
+    if (input.size() == 1 && isdigit(input[0]))
+        cap.open(stoi(input));
+    else 
+        cap.open(input);
     if (!cap.isOpened()) {
         std::cerr << "Can't open webcam or file video!" << std::endl;
         return -1;
