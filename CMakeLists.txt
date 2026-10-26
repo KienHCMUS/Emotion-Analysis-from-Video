@@ -14,4 +14,12 @@ target_link_libraries(MyApp ${OpenCV_LIBS})
 
 # Copy .onnx files to build directory for runtime access
 file(GLOB ONNX_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.onnx")
-file(COPY ${ONNX_FILES} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/Release)
+if(CMAKE_CONFIGURATION_TYPES)
+    # For multi-config: copy to Debug/Release folder
+    foreach(OUTPUT_CONFIG ${CMAKE_CONFIGURATION_TYPES})
+        file(COPY ${ONNX_FILES} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/${OUTPUT_CONFIG})
+    endforeach()
+else()
+    # For single-config: copy to build folder
+    file(COPY ${ONNX_FILES} DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+endif()

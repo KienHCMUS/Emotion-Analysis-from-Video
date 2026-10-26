@@ -8,9 +8,16 @@
 #include <opencv2/dnn.hpp>
 #include <opencv2/video/tracking.hpp>
 #include <vector>
+#ifdef _WIN32
+    #include <windows.h>
+#else
+    #include <unistd.h>
+    #include <limits.h>
+#endif
 
 using namespace cv;
 using namespace cv::dnn;
+namespace fs = std::filesystem;
 
 #define DETECT_INTERVAL 10 // Re-run detect after each 10 frames
 #define IOU_THRESHOLD 0.4  // Ngưỡng IoU để gán detection cho tracker
@@ -26,19 +33,32 @@ double calculateIoU(const Rect2d& rect1, const Rect2d& rect2) {
     return 0.0;
 }
 
+fs::path getExecutableDir() {
+#ifdef _WIN32
+    char buffer[MAX_PATH];
+    GetModuleFileNameA(NULL, buffer, MAX_PATH);
+    return fs::path(buffer).parent_path();
+#else
+    char buffer[PATH_MAX];
+    readlink("/proc/self/exe", buffer, PATH_MAX);
+    return fs::path(buffer).parent_path();
+#endif
+}
+
 int main() {
+    fs::path exePath = getExecutableDir();
     /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
     // 0. Create result folder if it does not exist
-    if (!std::filesystem::exists(LOG_ROOT)) {
-        if (std::filesystem::create_directory(LOG_ROOT))
+    if (!fs::exists(LOG_ROOT)) {
+        if (fs::create_directory(LOG_ROOT))
             std::cout << "Created folder " << LOG_ROOT << ".\n";
         else return -1;
     }
     // Create new folder save the result of i-th video
     int i = 1;
-    for (const auto& entry : std::filesystem::directory_iterator(LOG_ROOT)) i++;
+    for (const auto& entry : fs::directory_iterator(LOG_ROOT)) i++;
     std::string LOG_DIR = LOG_ROOT + "/" + std::to_string(i);
-    if (std::filesystem::create_directory(LOG_DIR))
+    if (fs::create_directory(LOG_DIR))
         std::cout << "Created folder " << i << ".\n";
     else return -1;
 
@@ -47,8 +67,9 @@ int main() {
     // 1. YuNet configuration: for detect face
     const int inputW = 640;
     const int inputH = 480;
+    fs::path yunetPath = exePath / "face_detection_yunet_2023mar_int8.onnx";
     Ptr<cv::FaceDetectorYN> detector = cv::FaceDetectorYN::create(
-        "face_detection_yunet_2023mar_int8.onnx", "",
+        yunetPath.string(), "",
         Size(inputW, inputH), 0.78f, 0.3f, 50
         // 0.78f: confidence threshold: only take prediction that has confidence score > confidence threshold
         // 0.3f: IoU threshold for Non-Maximum Suppression
@@ -63,7 +84,8 @@ int main() {
     
     /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
     // 2. MobileNet configuration: for classify emotion
-    Net emotionNet = readNetFromONNX("MobileNet.onnx");// 0.47f1score, 0.6445_neutral(m)_happy_supprise, MobileNet_acc_0.65, m6278
+    fs::path mobilenetPath = exePath / "MobileNet.onnx";
+    Net emotionNet = readNetFromONNX(mobilenetPath.string());// 0.47f1score, 0.6445_neutral(m)_happy_supprise, MobileNet_acc_0.65, m6278
     if (emotionNet.empty()) {
         std::cerr << "Can't load emotion classification model." << std::endl;
         return -1;
@@ -174,7 +196,7 @@ int main() {
                         long new_id = next_face_id;
                         std::string id_str = "ID" + std::to_string(new_id);
                         std::string face_dir_path = LOG_DIR + "/" + id_str;
-                        if (std::filesystem::create_directories(face_dir_path)) {
+                        if (fs::create_directories(face_dir_path)) {
                             std::cout << "Created folder for " << id_str << std::endl;
                         }
 
@@ -231,10 +253,10 @@ int main() {
             Rect current_roi = tracker_data.second;
 
             // Ensure current_roi is valid
-            current_roi.x = std::max(0, current_roi.x);
-            current_roi.y = std::max(0, current_roi.y);
-            current_roi.width = std::min(current_roi.width, frame.cols - current_roi.x);
-            current_roi.height = std::min(current_roi.height, frame.rows - current_roi.y);
+            current_roi.x = (std::max)(0, current_roi.x);
+            current_roi.y = (std::max)(0, current_roi.y);
+            current_roi.width = (std::min)(current_roi.width, frame.cols - current_roi.x);
+            current_roi.height = (std::min)(current_roi.height, frame.rows - current_roi.y);
             if (current_roi.width <= 0 || current_roi.height <= 0) continue;
 
             // Pre-process: convert BGR to RGB with R=G=B, resize and normalize
