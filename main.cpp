@@ -1,4 +1,4 @@
-#include <iostream>
+﻿#include <iostream>
 #include <vector>
 #include <string>
 #include <map>
@@ -14,8 +14,8 @@ using namespace cv::dnn;
 
 #define DETECT_INTERVAL 10 // Re-run detect after each 10 frames
 #define IOU_THRESHOLD 0.4  // Ngưỡng IoU để gán detection cho tracker
-#define EMO_W 48           // Input width of MobileNet
-#define EMO_H 48           // Input height of MobileNet
+#define EMO_W 64           // Input width of MobileNet
+#define EMO_H 64           // Input height of MobileNet
 const std::string LOG_ROOT = "face_logs"; // Result folder
 
 double calculateIoU(const Rect2d& rect1, const Rect2d& rect2) {
@@ -27,6 +27,7 @@ double calculateIoU(const Rect2d& rect1, const Rect2d& rect2) {
 }
 
 int main() {
+    /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
     // 0. Create result folder if it does not exist
     if (!std::filesystem::exists(LOG_ROOT)) {
         if (std::filesystem::create_directory(LOG_ROOT))
@@ -41,6 +42,8 @@ int main() {
         std::cout << "Created folder " << i << ".\n";
     else return -1;
 
+
+    /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
     // 1. YuNet configuration: for detect face
     const int inputW = 640;
     const int inputH = 480;
@@ -57,18 +60,22 @@ int main() {
         return -1;
     }
 
+    
+    /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
     // 2. MobileNet configuration: for classify emotion
-    Net emotionNet = readNetFromONNX("MobileNet.onnx");
+    Net emotionNet = readNetFromONNX("MobileNet.onnx");// 0.47f1score, 0.6445_neutral(m)_happy_supprise, MobileNet_acc_0.65, m6278
     if (emotionNet.empty()) {
-        std::cerr << "Can't load MobileNet model." << std::endl;
+        std::cerr << "Can't load emotion classification model." << std::endl;
         return -1;
     }
     emotionNet.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);
     emotionNet.setPreferableTarget(cv::dnn::DNN_TARGET_CPU);
-    std::vector<std::string> emotion_labels = { "Angry", "Disgust", "Fear", "Happy", "Neutral", "Sad", "Surprise" };
+    std::vector<std::string> emotion_labels = { "Angry", "Contempt", "Disgust", "Fear", "Happy", "Neutral", "Sad", "Surprise" };
     int num_classes = emotion_labels.size();
 
-    // 3. Open camera/video, configurate parameters for tracking
+
+    /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+    // 3. Open camera, configurate parameters for tracking
     VideoCapture cap(0); // 0: webcam. Can pass a directory to a video, like "video.mp4"
     if (!cap.isOpened()) {
         std::cerr << "Can't open webcam or file video!" << std::endl;
@@ -80,17 +87,28 @@ int main() {
     std::map<long, std::pair<Ptr<Tracker>, Rect2d>> active_trackers;
 
     std::map<long, std::ofstream> emotion_logs; // Map for retaining all CSV files are opened
-    // Vector 2D for saving average emotion of each person (each ID), format: [[Happy, ..., Disgust, Num_frame],...]
+    // Vector 2D for saving average emotion of each person (each ID), format: [[Angry, ..., Surprise, Num_frame],...]
     std::vector<std::vector<float>> average;
     std::cout << "Start YuNet Detection and Tracking. Press ESC to exit." << std::endl;
-
     Mat face;
+
+
+    // - - - - - Compare with result on previous frame to avoid noise - - - - - //
+    Mat pre_prob = Mat::zeros(1, 8, CV_32F);
+    Mat diff, prob;
+    double distSq;
+    float threshold = 0.3;
+    // - - - - - //
+
+
     while (true) {
         cap >> frame;
         if (frame.empty()) break;
         // Resize frame to match YuNet's input
         resize(frame, frame, Size(inputW, inputH), 0, 0, INTER_AREA);
 
+
+        /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
         // 4. Detect face use YuNet: for each DETECT_INTERVAL frame or when no face are in tracking
         //    and update trackers
         if (frame_count % DETECT_INTERVAL == 0 || active_trackers.empty()) {
@@ -170,7 +188,7 @@ int main() {
                         // Create and open CSV file
                         std::ofstream csv_file(face_dir_path + "/emotions.csv");
                         if (csv_file.is_open()) {
-                            csv_file << "frame,Angry,Disgust,Fear,Happy,Neutral,Sad,Surprise\n"; // Write header
+                            csv_file << "frame,Angry,Contempt,Disgust,Fear,Happy,Neutral,Sad,Surprise\n"; // Write header
                             emotion_logs[new_id] = std::move(csv_file); // Add file id to map
                         }
                         else std::cerr << "Can't create file CSV for " << id_str << std::endl;
@@ -180,6 +198,9 @@ int main() {
                 }
             }
         }
+
+
+        /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
         // 5. Tracking
         else {
             std::vector<long> failed_trackers;
@@ -201,14 +222,13 @@ int main() {
             }
         }
 
+
+        /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
         // 6. Classify emotion use MobileNet
         for (auto& pair_item : active_trackers) {
             long id = pair_item.first;
             auto& tracker_data = pair_item.second;
             Rect current_roi = tracker_data.second;
-            rectangle(frame, current_roi, Scalar(0, 255, 0), 2, 1);
-            cv::putText(frame, "ID: " + std::to_string(id), Point(current_roi.x, current_roi.y - 10),
-                FONT_HERSHEY_SIMPLEX, 0.7, Scalar(255, 0, 0), 2);
 
             // Ensure current_roi is valid
             current_roi.x = std::max(0, current_roi.x);
@@ -217,14 +237,28 @@ int main() {
             current_roi.height = std::min(current_roi.height, frame.rows - current_roi.y);
             if (current_roi.width <= 0 || current_roi.height <= 0) continue;
 
-            // Pre-process: convert RGB to grayscale, resize and normalize
+            // Pre-process: convert BGR to RGB with R=G=B, resize and normalize
             face = frame(current_roi);
-            cvtColor(face, face, COLOR_BGR2GRAY);
+            cvtColor(face, face, COLOR_BGR2GRAY); // cmt when using pca_svm_fer.onnx
+            cvtColor(face, face, COLOR_GRAY2RGB);
             face = dnn::blobFromImage(face, 1.0 / 255.0, Size(EMO_W, EMO_H));
 
             // Forward and extract output infomation
             emotionNet.setInput(face);
-            Mat prob = emotionNet.forward();
+            Mat cur_prob = emotionNet.forward();
+
+
+            // - - - - - Compare with result on previous frame to avoid noise - - - - - //
+            cv::absdiff(cur_prob, pre_prob, diff);
+            distSq = cv::norm(diff, cv::NORM_L2SQR);
+            if (distSq > threshold) {
+                prob = cur_prob;
+                cur_prob.copyTo(pre_prob);
+            }
+            else prob = pre_prob.clone();
+            // - - - - - //
+
+
             Point classIdPoint;
             double confidence;
             cv::minMaxLoc(prob, nullptr, &confidence, nullptr, &classIdPoint);
@@ -250,6 +284,9 @@ int main() {
             }
 
             // Show result (label, confidence) on video
+            rectangle(frame, current_roi, Scalar(0, 255, 0), 2, 1);
+            cv::putText(frame, "ID: " + std::to_string(id), Point(current_roi.x, current_roi.y - 10),
+                FONT_HERSHEY_SIMPLEX, 0.7, Scalar(255, 0, 0), 2);
             std::string label = emotion_labels[label_id] + format(" (%.2f)", confidence);
             cv::putText(frame, label, Point(current_roi.x, current_roi.y + 5),
                 FONT_HERSHEY_SIMPLEX, 0.6, Scalar(0, 255, 255), 2);
@@ -282,7 +319,7 @@ int main() {
     // Write average emotion to CSV file
     std::string filename = LOG_DIR + "/" + "output.csv";
     std::ofstream csv_file(filename);
-    if (csv_file.is_open()) csv_file << "ID,Angry,Disgust,Fear,Sad,Happy,Neutral,Sad,Surprise,Num_frames\n"; // Header
+    if (csv_file.is_open()) csv_file << "ID,Angry,Contempt,Disgust,Fear,Happy,Neutral,Sad,Surprise,Num_frames\n"; // Header
     else std::cerr << "Can't create file CSV for " << filename << "\n";
 
     int id_temp = 0;
