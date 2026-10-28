@@ -20,3 +20,8 @@ add_custom_command(TARGET MyApp POST_BUILD
     "${CMAKE_SOURCE_DIR}/models/backbone.onnx"
     "$<TARGET_FILE_DIR:MyApp>/backbone.onnx"
 )
+add_custom_command(TARGET MyApp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${CMAKE_SOURCE_DIR}/models/neckhead.onnx"
+    "$<TARGET_FILE_DIR:MyApp>/neckhead.onnx"
+)
